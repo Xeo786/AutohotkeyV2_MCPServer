@@ -23,3 +23,9 @@ If the user asks "what is this script doing?" or "why is it stuck?":
 1. Acknowledge what standard AHK `ControlGet` can and cannot see.
 2. If `WinGetControls` returns only `DesktopWindowXamlSource`, `ApplicationFrameInputSinkWindow`, or `Windows.UI.Core.CoreWindow`, immediately inform the user that the target is a Universal Windows Platform (UWP/WinUI) application. 
 3. Because Win32 commands cannot peer inside UWP XAML canvases, the AI must pivot and offer solutions using standard `Send`/`Click` coordinates, or explicitly request permission to use UIAutomation (UIA) libraries.
+
+### Rule 4: Recognizing Power Scope & Proactive Suggestions
+AutoHotkey is a highly capable systems tool, not just a macro engine. The AI must recognize this execution power and actively suggest optimal paths:
+1. **`DllCall`:** If the user is trying to accomplish system-level changes (e.g., memory address reading, display topology, low-level mouse hooks, GDI+ rendering), proactively suggest bypassing the UI and using direct Win32 API `DllCall` implementations.
+2. **`ComObject`:** If the user is attempting to read Microsoft Office files, interact with WMI (hardware info), WebView2, or standard accessibility nodes, proactively suggest using Component Object Model (`ComObject`) instead of trying to automate clicks on screen.
+3. **Pre-built Library Leverage:** When pivoting to these advanced topics, search the user's local `mylib` via `search_global_library` first. If a `class cJSON` or `class UIA` or `class WebView2` already exists, use their established interface rather than rewriting lower-level code.
