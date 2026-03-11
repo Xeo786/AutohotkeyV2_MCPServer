@@ -3,7 +3,11 @@ import subprocess
 import tempfile
 import glob
 from mcp.server.fastmcp import FastMCP
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
+from dbgp_client import (
+    DbgpClient, DbgpError, DbgpConnectionError,
+    get_active_client, set_active_client,
+)
 
 # Create the FastMCP server
 mcp = FastMCP("AutoHotkey v2 MCP Server")
@@ -161,6 +165,313 @@ def search_global_library(query: str) -> str:
         return f"No matches found for '{query}' in {GLOBAL_LIB_PATH}."
         
     return "\n\n".join(matches)
+
+# ==========================================================================
+# DBGp Debug Tools
+# ==========================================================================
+
+DBG_DEFAULT_PORT = 9005
+
+def _require_session() -> DbgpClient:
+    """Helper: return the active client or raise a clear error."""
+    client = get_active_client()
+    if not client or not client.connected:
+        raise RuntimeError("No active debug session. Call dbg_attach first.")
+    return client
+
+
+@mcp.tool()
+def dbg_attach(pid: int, port: int = DBG_DEFAULT_PORT, timeout: int = 5) -> Dict[str, Any]:
+    """
+    Attach the debugger to a running AutoHotkey script by PID.
+    Starts a TCP listener and sends AHK_ATTACH_DEBUGGER to the target process.
+    """
+    # Close any existing session
+    old = get_active_client()
+    if old:
+        try:
+            old.close()
+        except Exception:
+            pass
+        set_active_client(None)
+
+    client = DbgpClient()
+    try:
+        client.start_listening(port=port)
+    except Exception as e:
+        return {"error": f"Failed to start listener on port {port}: {e}"}
+
+    # Use an AHK helper to send AHK_ATTACH_DEBUGGER to the target
+    attach_script = f'''#Requires AutoHotkey v2.0
+#NoTrayIcon
+DetectHiddenWindows(true)
+attach_msg := DllCall("RegisterWindowMessage", "Str", "AHK_ATTACH_DEBUGGER")
+hwnds := WinGetList("ahk_class AutoHotkey ahk_pid {pid}")
+if hwnds.Length = 0 {{
+    FileAppend("ERROR: No AutoHotkey window found for PID {pid}`n", "*")
+    ExitApp(1)
+}}
+sent := 0
+for hwnd in hwnds {{
+    try {{
+        PostMessage(attach_msg, 0, {port},, hwnd)
+        sent++
+    }}
+}}
+FileAppend("SENT:" sent "`n", "*")
+'''
+    result = run_ahk_script(attach_script, timeout_seconds=3)
+
+    if result.get("exit_code") != 0 or "ERROR" in result.get("stdout", ""):
+        client.close()
+        return {
+            "error": "Failed to send AHK_ATTACH_DEBUGGER",
+            "details": result.get("stdout", "") + result.get("stderr", ""),
+        }
+
+    # Wait for the script to connect back
+    try:
+        info = client.accept_connection(timeout=timeout)
+    except DbgpConnectionError as e:
+        client.close()
+        return {"error": str(e)}
+
+    set_active_client(client)
+
+    # Configure session for AI-friendly usage
+    try:
+        client.feature_set("max_depth", "2")
+        client.feature_set("max_data", "1024")
+        client.feature_set("max_children", "64")
+    except Exception:
+        pass  # Non-critical
+
+    return info
+
+
+@mcp.tool()
+def dbg_detach() -> Dict[str, str]:
+    """
+    Detach from the current debug session, letting the script continue.
+    """
+    client = get_active_client()
+    if not client or not client.connected:
+        return {"status": "no_session", "message": "No active debug session."}
+
+    try:
+        client.detach()
+    except Exception:
+        pass
+    client.close()
+    set_active_client(None)
+    return {"status": "detached"}
+
+
+@mcp.tool()
+def dbg_status() -> Dict[str, Any]:
+    """
+    Get the current status of the debug session.
+    """
+    client = get_active_client()
+    if not client or not client.connected:
+        return {"status": "no_session"}
+    try:
+        return client.status()
+    except DbgpError as e:
+        return {"error": str(e)}
+    except DbgpConnectionError:
+        set_active_client(None)
+        return {"status": "disconnected", "error": "Connection lost"}
+
+
+@mcp.tool()
+def dbg_break() -> Dict[str, Any]:
+    """
+    Pause execution of the running script (async break).
+    """
+    client = _require_session()
+    try:
+        return client.send_break()
+    except DbgpError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def dbg_continue(mode: str = "run") -> Dict[str, Any]:
+    """
+    Resume execution. mode: 'run', 'step_into', 'step_over', 'step_out'.
+    """
+    client = _require_session()
+    try:
+        if mode == "step_into":
+            return client.step_into()
+        elif mode == "step_over":
+            return client.step_over()
+        elif mode == "step_out":
+            return client.step_out()
+        else:
+            return client.run()
+    except DbgpError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def dbg_stack() -> Dict[str, Any]:
+    """
+    Get the current call stack.
+    """
+    client = _require_session()
+    try:
+        frames = client.stack_get()
+        return {"frames": [f.to_dict() for f in frames]}
+    except DbgpError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def dbg_get_vars(context: int = 0, depth: int = 0) -> Dict[str, Any]:
+    """
+    Get variables in a context (0=Local, 1=Global) at a given stack depth.
+    """
+    # AHK built-in class names that pollute global variable listings
+    AHK_BUILTINS = {
+        "Any", "Array", "BoundFunc", "Buffer", "Class", "ClipboardAll",
+        "Closure", "ComObjArray", "ComObject", "ComValue", "ComValueRef",
+        "Enumerator", "Error", "File", "Float", "Func", "Gui", "IndexError",
+        "InputHook", "Integer", "KeyError", "Map", "MemberError", "Menu",
+        "MenuBar", "MethodError", "Number", "OSError", "Object",
+        "PropertyError", "RegExMatchInfo", "String", "TargetError",
+        "TimeoutError", "TypeError", "UnsetError", "UnsetItemError",
+        "ValueError", "VarRef", "ZeroDivisionError",
+    }
+    client = _require_session()
+    try:
+        variables = client.context_get(context_id=context, depth=depth)
+        filtered = [
+            v for v in variables
+            if v.facet != "Builtin"
+            and not (v.type == "object" and v.name in AHK_BUILTINS)
+            and not v.name.startswith("A_")  # Built-in A_ vars unless specifically requested
+        ]
+        return {
+            "count": len(filtered),
+            "variables": [v.to_dict() for v in filtered],
+        }
+    except DbgpError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def dbg_get_var(name: str, context: int = 0, depth: int = 0) -> Dict[str, Any]:
+    """
+    Get a single variable by name.
+    """
+    client = _require_session()
+    try:
+        var = client.property_get(name, context_id=context, depth=depth)
+        return var.to_dict()
+    except DbgpError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def dbg_set_var(name: str, value: str) -> Dict[str, Any]:
+    """
+    Set a variable's value in the current context.
+    """
+    client = _require_session()
+    try:
+        success = client.property_set(name, value)
+        return {"success": success}
+    except DbgpError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def dbg_eval(expression: str) -> Dict[str, Any]:
+    """
+    Evaluate an AHK expression in the current execution context.
+    The script must be in a 'break' state.
+    """
+    client = _require_session()
+    try:
+        result = client.eval(expression)
+        if result:
+            return result.to_dict()
+        return {"result": None, "message": "Expression evaluated, no return value."}
+    except DbgpError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def dbg_set_breakpoint(file: str, line: int) -> Dict[str, Any]:
+    """
+    Set a line breakpoint in a script file.
+    """
+    client = _require_session()
+    try:
+        return client.breakpoint_set(file=file, line=line)
+    except DbgpError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def dbg_list_breakpoints() -> Dict[str, Any]:
+    """
+    List all active breakpoints.
+    """
+    client = _require_session()
+    try:
+        bps = client.breakpoint_list()
+        return {"count": len(bps), "breakpoints": bps}
+    except DbgpError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def dbg_remove_breakpoint(breakpoint_id: str) -> Dict[str, Any]:
+    """
+    Remove a breakpoint by its ID.
+    """
+    client = _require_session()
+    try:
+        client.breakpoint_remove(breakpoint_id)
+        return {"success": True, "removed_id": breakpoint_id}
+    except DbgpError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def dbg_get_source(file: str = "", begin_line: int = 0, end_line: int = 0) -> Dict[str, Any]:
+    """
+    Retrieve source code from the debugged script.
+    If file is empty, gets the current file.
+    """
+    client = _require_session()
+    try:
+        src = client.source(
+            file=file if file else None,
+            begin_line=begin_line,
+            end_line=end_line,
+        )
+        return {"source": src}
+    except DbgpError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def dbg_stdout(mode: int = 1) -> Dict[str, Any]:
+    """
+    Set stdout redirection for the debugged script.
+    0=disable, 1=copy to debugger, 2=redirect to debugger only.
+    """
+    client = _require_session()
+    try:
+        success = client.stdout(mode)
+        return {"success": success, "mode": mode}
+    except DbgpError as e:
+        return {"error": str(e)}
+
 
 if __name__ == "__main__":
     mcp.run()

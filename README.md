@@ -3,7 +3,7 @@
 ## What is it?
 This is a custom **Model Context Protocol (MCP)** server built in Python, designed specifically to bridge the gap between AI coding assistants and the AutoHotkey v2 ecosystem on Windows. 
 
-MCP is an open standard that enables AI models to connect securely to local data sources and tools. This server exposes four powerful, specialized tools to the AI, granting it the context and execution capabilities needed to write perfect AHK scripts.
+MCP is an open standard that enables AI models to connect securely to local data sources and tools. This server exposes powerful, specialized tools to the AI, granting it the context, execution, and **live debugging** capabilities needed to write perfect AHK scripts.
 
 ## Why was it created?
 AutoHotkey v2 introduced strict object-oriented syntax, removing graceful failures and silent errors that existed in v1. When an AI tries to write AHK code blindly, it often:
@@ -11,36 +11,80 @@ AutoHotkey v2 introduced strict object-oriented syntax, removing graceful failur
 2. Cannot tell if the target window title or class is correct.
 3. Cannot verify if the script even launches without crashing.
 4. Doesn't know what custom libraries the user already has installed.
+5. **Cannot debug running scripts** to diagnose issues.
 
-This server solves **all** of these problems by giving the AI eyes (inspect active window), knowledge (search library), and hands (validate and run).
+This server solves **all** of these problems by giving the AI eyes (inspect active window), knowledge (search library), hands (validate and run), and now a **full debugger** (DBGp protocol integration).
 
 ---
 
 ## How does it help the AI? (Features)
 
-The server exposes four tools to the AI:
+The server exposes tools in two categories:
 
-### 1. `validate_ahk_syntax`
+### Core Tools
+
+#### 1. `validate_ahk_syntax`
 - **What it does:** Runs external AHK code through AutoHotkey's `/Validate` switch, sending syntax errors to `/ErrorStdOut`.
 - **How it helps:** The AI can verify that the code it just wrote is syntactically sound, catching missing braces, undefined variables, or v1 legacy commands *before* handing the script to the user.
 
-### 2. `run_ahk_script`
+#### 2. `run_ahk_script`
 - **What it does:** Executes a temporary script and forcefully captures standard output (`FileAppend(text, "*")`) and runtime errors, strictly enforcing a timeout (e.g., 3 seconds) to prevent infinite loops.
-- **How it helps:** The AI can test logical behavior (e.g., "Does this Regex expression actually math correctly in AHK?"). Fast feedback loops mean fewer broken scripts.
+- **How it helps:** The AI can test logical behavior (e.g., "Does this Regex expression actually match correctly in AHK?"). Fast feedback loops mean fewer broken scripts.
 
-### 3. `inspect_active_window`
+#### 3. `inspect_active_window`
 - **What it does:** Runs a tiny script returning the Title, Class (`ahk_class`), and Executable (`ahk_exe`) of whatever window the user currently has focused.
 - **How it helps:** Finding correct window hooks is tedious. The user can just focus an app, ask the AI to "write a script for my active window," and the AI can pull the exact selectors needed for `WinActivate` or `ControlSend`.
 
-### 4. `search_global_library`
-- **What it does:** Performs a text search through the user’s master AHK library folder (`C:\Users\AA\Documents\AHK\mylib`).
+#### 4. `search_global_library`
+- **What it does:** Performs a text search through the user's master AHK library folder (`C:\Users\AA\Documents\AHK\mylib`).
 - **How it helps:** Instead of reinventing the wheel (like creating a new WebSocket class), the AI can search the user's local drive, read the existing custom wrappers, and write code that utilizes the user's preferred ecosystem. 
 
 ---
 
-## Example Workflow
+### DBGp Live Debugger Tools
 
-Here is how an interaction with the AI works when this server is running:
+These tools allow the AI to **attach to and debug running AutoHotkey scripts** in real-time using the [DBGp protocol](https://xdebug.org/docs/dbgp). This is the same protocol used by SciTE4AutoHotkey and VS Code debug adapters.
+
+#### Connection Management
+| Tool | Description |
+|---|---|
+| `dbg_attach(pid, port?, timeout?)` | Attach to a running AHK script by PID. Starts a TCP listener and sends `AHK_ATTACH_DEBUGGER` to trigger a debug connection. |
+| `dbg_detach()` | Detach from the debug session, letting the script continue normally. |
+| `dbg_status()` | Get the current debugger state (`break`, `running`, `stopped`, etc.). |
+
+#### Execution Control
+| Tool | Description |
+|---|---|
+| `dbg_break()` | Pause execution of a running script. |
+| `dbg_continue(mode)` | Resume execution: `run`, `step_into`, `step_over`, or `step_out`. |
+
+#### Inspection & Evaluation  
+| Tool | Description |
+|---|---|
+| `dbg_stack()` | Get the current call stack (file, line, function). |
+| `dbg_get_vars(context, depth)` | Get all variables in a context (`0`=Local, `1`=Global) at a stack depth. Filters out AHK built-in classes automatically. |
+| `dbg_get_var(name, context, depth)` | Get a single variable by name. |
+| `dbg_set_var(name, value)` | Set a variable's value at runtime. |
+| `dbg_eval(expression)` | Evaluate any AHK expression in the current context. |
+| `dbg_get_source(file, begin_line, end_line)` | Retrieve source code from the debugged script. |
+
+#### Breakpoints
+| Tool | Description |
+|---|---|
+| `dbg_set_breakpoint(file, line)` | Set a line breakpoint. |
+| `dbg_list_breakpoints()` | List all active breakpoints. |
+| `dbg_remove_breakpoint(breakpoint_id)` | Remove a breakpoint by ID. |
+
+#### I/O
+| Tool | Description |
+|---|---|
+| `dbg_stdout(mode)` | Redirect script stdout to the debugger: `0`=disable, `1`=copy, `2`=redirect. |
+
+---
+
+## Example Workflows
+
+### Basic: Write and Validate a Script
 
 **User:** "Write a script that closes my active window and logs it using my `MyLogger.ahk` library."
 
@@ -50,6 +94,20 @@ Here is how an interaction with the AI works when this server is running:
 3. **AI writes the draft script.**
 4. **AI calls `validate_ahk_syntax`** -> Realizes it forgot a closing brace.
 5. **AI fixes the code and gives the user a guaranteed-to-work script.**
+
+### Advanced: Debug a Stuck Script
+
+**User:** "My script PID 12345 seems stuck. Can you figure out why?"
+
+**AI Process:**
+1. **AI calls `dbg_attach(pid=12345)`** -> Connects to the running script.
+2. **AI calls `dbg_break()`** -> Pauses execution.
+3. **AI calls `dbg_stack()`** -> Sees script is stuck in `MyFunction()` at line 42.
+4. **AI calls `dbg_get_vars(context=0)`** -> Inspects local variables, finds `retryCount = 999`.
+5. **AI calls `dbg_eval("retryCount := 0")`** -> Resets the counter.
+6. **AI calls `dbg_continue(mode="run")`** -> Resumes the script.
+7. **AI calls `dbg_detach()`** -> Disconnects cleanly.
+8. **AI explains:** "Your script was stuck in an infinite retry loop. I reset `retryCount` to 0."
 
 ---
 
@@ -74,35 +132,22 @@ Here is how an interaction with the AI works when this server is running:
      }
    }
    ```
-4. **Restart:** Restart your IDE. The tools (`validate_ahk_syntax`, `run_ahk_script`, `inspect_active_window`, `search_global_library`) will now be available in the context of your chats!
-## AI Core Operating Rules (mcp_rules.md)
+4. **Restart:** Restart your IDE. All tools will be available in the context of your chats.
 
-When an AI is leveraging this MCP Server to write or automate AutoHotkey scripts, it **MUST** strict abide by the following operational procedures:
+---
 
-### Rule 1: Window Interrogation & Control Extraction (`WinGetControls`)
-Before attempting to click a button, type in a field, or automate a GUI, the AI must fully map the application's interface:
-1. Use `run_ahk_script` to execute `WinGetList("Target Title")` or `WinGetList("ahk_exe target.exe")`.
-2. **If multiple windows are found:** The AI MUST halt and ask the user to clarify or select which HWND/Window Title is the correct target. (Do not guess on window handles).
-3. **Once the exact window is confirmed:** Use `WinGetControls()` to loop through the HWND and extract the ClassNN of every control.
-4. Extract the properties (`ControlGetText`, `ControlGetEnabled`, `ControlGetChecked`) of each control to build a map. Use this map to construct flawless `ControlClick` or `ControlSend` commands.
+## Architecture
 
-### Rule 2: AHK Debugging via PostMessage (`ListLines` / `ListVars`)
-If the user asks "what is this script doing?" or "why is it stuck?":
-1. **Never guess.** Connect directly to the script like a debugger.
-2. Locate the target script's hidden main window. Since AHK scripts hide their primary command window, you must execute:
-   `WinGetList("ahk_class AutoHotkey ahk_pid [TargetPID]")`
-3. Unmask the state of the script using `PostMessage`:
-   - Send `PostMessage(0x111, 65406, 0,, mainWindowHwnd)` to trigger `View > Lines most recently executed`.
-   - Send `PostMessage(0x111, 65407, 0,, mainWindowHwnd)` to trigger `View > Variables and their contents`.
-4. Read the output using `ControlGetText("Edit1", mainWindowHwnd)` and analyze the execution flow or variable states to explain the problem to the user.
+```
+server.py          ← MCP tool definitions (FastMCP)
+├── Core tools     ← validate, run, inspect, search
+├── Debug tools    ← 15 dbg_* tools
+└── dbgp_client.py ← Pure Python DBGp protocol client
+    ├── TCP listener (default port 9005)
+    ├── DBGp wire protocol (length\0xml\0)
+    └── XML response parsing
+```
 
-### Rule 3: Native Environment & Limitations
-1. Acknowledge what standard AHK `ControlGet` can and cannot see.
-2. If `WinGetControls` returns only `DesktopWindowXamlSource`, `ApplicationFrameInputSinkWindow`, or `Windows.UI.Core.CoreWindow`, immediately inform the user that the target is a Universal Windows Platform (UWP/WinUI) application. 
-3. Because Win32 commands cannot peer inside UWP XAML canvases, the AI must pivot and offer solutions using standard `Send`/`Click` coordinates, or explicitly request permission to use UIAutomation (UIA) libraries.
+## AI Core Operating Rules
 
-### Rule 4: Recognizing Power Scope & Proactive Suggestions
-AutoHotkey is a highly capable systems tool, not just a macro engine. The AI must recognize this execution power and actively suggest optimal paths:
-1. **`DllCall`:** If the user is trying to accomplish system-level changes (e.g., memory address reading, display topology, low-level mouse hooks, GDI+ rendering), proactively suggest bypassing the UI and using direct Win32 API `DllCall` implementations.
-2. **`ComObject`:** If the user is attempting to read Microsoft Office files, interact with WMI (hardware info), WebView2, or standard accessibility nodes, proactively suggest using Component Object Model (`ComObject`) instead of trying to automate clicks on screen.
-3. **Pre-built Library Leverage:** When pivoting to these advanced topics, search the user's local `mylib` via `search_global_library` first. If a `class cJSON` or `class UIA` or `class WebView2` already exists, use their established interface rather than rewriting lower-level code.
+See [mcp_rules.md](mcp_rules.md) for the complete set of rules the AI must follow when using these tools.

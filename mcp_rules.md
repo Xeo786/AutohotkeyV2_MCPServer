@@ -9,15 +9,30 @@ Before attempting to click a button, type in a field, or automate a GUI, the AI 
 3. **Once the exact window is confirmed:** Use `WinGetControls()` to loop through the HWND and extract the ClassNN of every control.
 4. Extract the properties (`ControlGetText`, `ControlGetEnabled`, `ControlGetChecked`) of each control to build a map. Use this map to construct flawless `ControlClick` or `ControlSend` commands.
 
-### Rule 2: AHK Debugging via PostMessage (`ListLines` / `ListVars`)
-If the user asks "what is this script doing?" or "why is it stuck?":
-1. **Never guess.** Connect directly to the script like a debugger.
-2. Locate the target script's hidden main window. Since AHK scripts hide their primary command window, you must execute:
-   `WinGetList("ahk_class AutoHotkey ahk_pid [TargetPID]")`
-3. Unmask the state of the script using `PostMessage`:
-   - Send `PostMessage(0x111, 65406, 0,, mainWindowHwnd)` to trigger `View > Lines most recently executed`.
-   - Send `PostMessage(0x111, 65407, 0,, mainWindowHwnd)` to trigger `View > Variables and their contents`.
-4. Read the output using `ControlGetText("Edit1", mainWindowHwnd)` and analyze the execution flow or variable states to explain the problem to the user.
+### Rule 2: AHK Debugging — DBGp Live Debugger (Primary) & PostMessage (Fallback)
+If the user asks "what is this script doing?", "debug this script", or "why is it stuck?":
+
+#### A. DBGp Protocol Debugging (Preferred)
+When you need **deep, interactive debugging** (inspect variables, evaluate expressions, set breakpoints, step through code), use the DBGp debug tools:
+1. **Attach:** Call `dbg_attach(pid=<TargetPID>)` to connect to the running script via the DBGp protocol. This sends an `AHK_ATTACH_DEBUGGER` window message and establishes a TCP debug session.
+2. **Inspect State:** Use `dbg_get_vars(context=1)` to inspect global variables, `dbg_get_vars(context=0)` for local variables at the current stack frame.
+3. **Pause & Step:** Use `dbg_break()` to pause execution, then `dbg_continue(mode="step_over")` or `dbg_continue(mode="step_into")` to step through code line-by-line.
+4. **Evaluate:** Use `dbg_eval(expression)` to evaluate any AHK expression in the current context. **Note:** `eval` only works when paused inside a function — if paused between timer ticks, set a breakpoint first.
+5. **Breakpoints:** Use `dbg_set_breakpoint(file, line)` to set breakpoints, `dbg_list_breakpoints()` to list them.
+6. **Source:** Use `dbg_get_source()` to retrieve the script's source code.
+7. **Finish:** Always call `dbg_detach()` when done to let the script resume normally.
+
+**Important constraints:**
+- The target script must NOT already have a debugger attached (VS Code, SciTE, etc.).
+- Cannot cross UAC boundaries (non-admin → admin process).
+- Only one debug session at a time.
+
+#### B. PostMessage Fallback (Quick Peek)
+For a **fast, lightweight snapshot** of a script's state (no interactive stepping needed):
+1. Locate the target script's hidden main window via `WinGetList("ahk_class AutoHotkey ahk_pid [TargetPID]")`.
+2. Send `PostMessage(0x111, 65406, 0,, mainWindowHwnd)` to trigger `View > Lines most recently executed`.
+3. Send `PostMessage(0x111, 65407, 0,, mainWindowHwnd)` to trigger `View > Variables and their contents`.
+4. Read the output using `ControlGetText("Edit1", mainWindowHwnd)` and analyze.
 
 ### Rule 3: Native Environment & Limitations
 1. Acknowledge what standard AHK `ControlGet` can and cannot see.
