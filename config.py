@@ -22,6 +22,27 @@ def save_config(config):
     with open(CONFIG_FILE, "w") as f:
         json.dump(config, f, indent=4)
 
+def prompt_path(title, initialdir=None, is_file=True):
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        if is_file:
+            path = filedialog.askopenfilename(
+                title=title, 
+                initialdir=initialdir, 
+                filetypes=[("AutoHotkey Executable", "AutoHotkey*.exe"), ("Executables", "*.exe"), ("All Files", "*.*")]
+            )
+        else:
+            path = filedialog.askdirectory(title=title, initialdir=initialdir)
+        root.destroy()
+        return path if path else None
+    except Exception as e:
+        print(f"Failed to show dialog: {e}")
+        return None
+
 def resolve_ahk_path():
     # 1. Environment Variable
     env_path = os.environ.get("AHK_PATH")

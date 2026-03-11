@@ -26,18 +26,37 @@ def _create_temp_ahk(script_content: str) -> str:
     return path
 
 @mcp.tool()
-def configure_paths(ahk_path: Optional[str] = None, lib_path: Optional[str] = None) -> Dict[str, str]:
+def configure_paths(
+    ahk_path: Optional[str] = None, 
+    lib_path: Optional[str] = None, 
+    use_dialog: bool = False
+) -> Dict[str, str]:
     """
     Configure the paths for AutoHotkey and the Global Library.
     Settings are persisted to the user's AppData.
+    If 'use_dialog' is True, native selection dialogs will be shown on the host.
     """
+    from config import prompt_path
+    
     config = get_config()
+    
+    if use_dialog:
+        if not ahk_path:
+            p = prompt_path("Select AutoHotkey64.exe", is_file=True)
+            if p:
+                ahk_path = p
+        if not lib_path:
+            p = prompt_path("Select Global Library Folder", is_file=False)
+            if p:
+                lib_path = p
+
     if ahk_path:
         config["ahk_path"] = ahk_path
     if lib_path:
         config["lib_path"] = lib_path
     
-    save_config(config)
+    if ahk_path or lib_path:
+        save_config(config)
     
     # Update current session globals
     global AHK_PATH, GLOBAL_LIB_PATH

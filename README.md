@@ -41,6 +41,7 @@ The server exposes tools in two categories:
 
 #### 5. `configure_paths`
 - **What it does:** Sets and persists the `AHK_PATH` and `GLOBAL_LIB_PATH` to the user's `AppData`.
+- **New Feature:** Supports `use_dialog=True` to pop up native Windows file/directory selection dialogs on the host machine for easy setup.
 - **How it helps:** Allows the server to remain portable and tool-neutral, letting the user (or AI) configure the exact binaries and libraries to use without editing the source code.
 
 ---
