@@ -8,12 +8,15 @@ from dbgp_client import (
     DbgpClient, DbgpError, DbgpConnectionError,
     get_active_client, set_active_client,
 )
+from config import (
+    resolve_ahk_path, resolve_lib_path, save_config, get_config
+)
 
 # Create the FastMCP server
 mcp = FastMCP("AutoHotkey v2 MCP Server")
 
-AHK_PATH = r"C:\Program Files\AutoHotkey\v2.0.21\AutoHotkey64.exe"
-GLOBAL_LIB_PATH = r"C:\Users\AA\Documents\AHK\mylib"
+AHK_PATH = resolve_ahk_path()
+GLOBAL_LIB_PATH = resolve_lib_path()
 
 def _create_temp_ahk(script_content: str) -> str:
     """Helper to write content to a temp file and return its path."""
@@ -21,6 +24,33 @@ def _create_temp_ahk(script_content: str) -> str:
     with os.fdopen(fd, 'w', encoding='utf-8') as f:
         f.write(script_content)
     return path
+
+@mcp.tool()
+def configure_paths(ahk_path: Optional[str] = None, lib_path: Optional[str] = None) -> Dict[str, str]:
+    """
+    Configure the paths for AutoHotkey and the Global Library.
+    Settings are persisted to the user's AppData.
+    """
+    config = get_config()
+    if ahk_path:
+        config["ahk_path"] = ahk_path
+    if lib_path:
+        config["lib_path"] = lib_path
+    
+    save_config(config)
+    
+    # Update current session globals
+    global AHK_PATH, GLOBAL_LIB_PATH
+    if ahk_path:
+        AHK_PATH = ahk_path
+    if lib_path:
+        GLOBAL_LIB_PATH = lib_path
+        
+    return {
+        "status": "success",
+        "ahk_path": AHK_PATH,
+        "lib_path": GLOBAL_LIB_PATH
+    }
 
 @mcp.tool()
 def validate_ahk_syntax(script_content: str) -> str:

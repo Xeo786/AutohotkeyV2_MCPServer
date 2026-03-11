@@ -36,8 +36,12 @@ The server exposes tools in two categories:
 - **How it helps:** Finding correct window hooks is tedious. The user can just focus an app, ask the AI to "write a script for my active window," and the AI can pull the exact selectors needed for `WinActivate` or `ControlSend`.
 
 #### 4. `search_global_library`
-- **What it does:** Performs a text search through the user's master AHK library folder (`C:\Users\AA\Documents\AHK\mylib`).
+- **What it does:** Performs a text search through the user's master AHK library folder.
 - **How it helps:** Instead of reinventing the wheel (like creating a new WebSocket class), the AI can search the user's local drive, read the existing custom wrappers, and write code that utilizes the user's preferred ecosystem. 
+
+#### 5. `configure_paths`
+- **What it does:** Sets and persists the `AHK_PATH` and `GLOBAL_LIB_PATH` to the user's `AppData`.
+- **How it helps:** Allows the server to remain portable and tool-neutral, letting the user (or AI) configure the exact binaries and libraries to use without editing the source code.
 
 ---
 
@@ -111,28 +115,12 @@ These tools allow the AI to **attach to and debug running AutoHotkey scripts** i
 
 ---
 
-## How to Install and Use It
+4. **Configure Paths (Optional but Recommended):**
+   By default, the server looks for AHK in standard locations. You can set your custom paths by calling the `configure_paths` tool once the server is running, or by setting environment variables:
+   - `AHK_PATH`: Path to `AutoHotkey64.exe`
+   - `GLOBAL_LIB_PATH`: Path to your script library folder.
 
-1. **Prerequisites:** Ensure you have Python installed and AutoHotkey v2 installed at `C:\Program Files\AutoHotkey\v2.0.21\AutoHotkey64.exe`.
-2. **Install MCP Package:** Open a terminal in this directory and run:
-   ```cmd
-   pip install -r requirements.txt
-   ```
-3. **Configure your AI IDE:** Open your AI IDE's `mcp_config.json` (or equivalent MCP settings file) and add the following block:
-   ```json
-   {
-     "mcpServers": {
-       "ahkv2-mcp": {
-         "command": "python",
-         "args": [
-           "s:\\lib\\AutohotkeyV2_MCPServer\\server.py"
-         ],
-         "env": {}
-       }
-     }
-   }
-   ```
-4. **Restart:** Restart your IDE. All tools will be available in the context of your chats.
+5. **Restart:** Restart your IDE. All tools will be available in the context of your chats.
 
 ---
 
