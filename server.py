@@ -250,6 +250,64 @@ FileAppend("SENT:" sent "`n", "*")
 
 
 @mcp.tool()
+def dbg_launch(path: str, port: int = DBG_DEFAULT_PORT, timeout: int = 5) -> Dict[str, Any]:
+    """
+    Launch an AutoHotkey script with the /Debug flag and connect the debugger.
+    This allows catching load-time errors (like syntax errors).
+    """
+    # Close any existing session
+    old = get_active_client()
+    if old:
+        try:
+            old.close()
+        except Exception:
+            pass
+        set_active_client(None)
+
+    client = DbgpClient()
+    try:
+        client.start_listening(port=port)
+    except Exception as e:
+        return {"error": f"Failed to start listener on port {port}: {e}"}
+
+    # Launch the script with /Debug
+    # Format: AutoHotkey.exe /Debug [address:port] "script_path"
+    try:
+        if os.name == 'nt':
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = 0 # SW_HIDE
+
+        # The = is mandatory if an address is specified, or AHK thinks it's a script path
+        subprocess.Popen(
+            [AHK_PATH, "/ErrorStdOut", "/force", f"/Debug=127.0.0.1:{port}", path],
+            startupinfo=startupinfo,
+        )
+    except Exception as e:
+        client.close()
+        return {"error": f"Failed to launch script: {e}"}
+
+    # Wait for the script to connect back
+    try:
+        info = client.accept_connection(timeout=timeout)
+    except DbgpConnectionError as e:
+        client.close()
+        return {"error": str(e)}
+
+    set_active_client(client)
+
+    # Configure session for AI-friendly usage
+    try:
+        client.feature_set("max_depth", "2")
+        client.feature_set("max_data", "1024")
+        client.feature_set("max_children", "64")
+    except Exception:
+        pass  # Non-critical
+
+    return info
+
+
+@mcp.tool()
 def dbg_detach() -> Dict[str, str]:
     """
     Detach from the current debug session, letting the script continue.
