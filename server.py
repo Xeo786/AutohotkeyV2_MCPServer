@@ -33,7 +33,7 @@ def _create_temp_ahk(script_content: str) -> str:
         f.write(script_content)
     return path
 
-def _log_action(script_content: str, tool_name: str, action_description: str, result: Optional[Dict[str, Any]] = None):
+def _log_action(script_content: str, tool_name: str, action_description: str, result: Optional[Dict[str, Any]] = None, workspace: Optional[str] = None):
     """Logs the script and metadata to the history directory."""
     try:
         now = datetime.now()
@@ -68,7 +68,7 @@ def _log_action(script_content: str, tool_name: str, action_description: str, re
             "tool": tool_name,
             "description": action_description,
             "script_file": str(script_path),
-            "workspace": os.getcwd(),
+            "workspace": workspace if workspace else os.getcwd(),
             "summary": first_line,
             "exit_code": result.get("exit_code") if result else None
         }
@@ -132,7 +132,7 @@ def configure_paths(
     }
 
 @mcp.tool()
-def validate_ahk_syntax(script_content: str, action_description: str = "Syntax Validation") -> str:
+def validate_ahk_syntax(script_content: str, action_description: str = "Syntax Validation", workspace: Optional[str] = None) -> str:
     """
     Validates AutoHotkey v2 syntax without executing the script.
     """
@@ -159,7 +159,7 @@ def validate_ahk_syntax(script_content: str, action_description: str = "Syntax V
         else:
             status_msg = f"Syntax Error (Exit Code {result.returncode}):\n{result.stderr.strip()}"
         
-        _log_action(script_content, "validate_ahk_syntax", action_description, {"exit_code": result.returncode})
+        _log_action(script_content, "validate_ahk_syntax", action_description, {"exit_code": result.returncode}, workspace)
         return status_msg
     except Exception as e:
         return f"Execution Error: {str(e)}"
@@ -167,7 +167,7 @@ def validate_ahk_syntax(script_content: str, action_description: str = "Syntax V
         os.remove(temp_path)
 
 @mcp.tool()
-def run_ahk_script(script_content: str, timeout_seconds: int = 3, action_description: str = "Manual Script Execution") -> Dict[str, Any]:
+def run_ahk_script(script_content: str, timeout_seconds: int = 3, action_description: str = "Manual Script Execution", workspace: Optional[str] = None) -> Dict[str, Any]:
     """
     Runs an AutoHotkey v2 script with a strictly enforced timeout.
     Returns stdout, stderr, and exit_code.
@@ -195,7 +195,7 @@ def run_ahk_script(script_content: str, timeout_seconds: int = 3, action_descrip
             "stderr": result.stderr,
             "exit_code": result.returncode
         }
-        _log_action(script_content, "run_ahk_script", action_description, output)
+        _log_action(script_content, "run_ahk_script", action_description, output, workspace)
         return output
     except subprocess.TimeoutExpired as e:
         stdout = e.stdout.decode('utf-8', errors='replace') if isinstance(e.stdout, bytes) else (e.stdout or "")
@@ -206,7 +206,7 @@ def run_ahk_script(script_content: str, timeout_seconds: int = 3, action_descrip
             "exit_code": -1,
             "error": f"Script execution timed out after {timeout_seconds} seconds."
         }
-        _log_action(script_content, "run_ahk_script", action_description, output)
+        _log_action(script_content, "run_ahk_script", action_description, output, workspace)
         return output
     except Exception as e:
         return {
@@ -219,7 +219,7 @@ def run_ahk_script(script_content: str, timeout_seconds: int = 3, action_descrip
         os.remove(temp_path)
 
 @mcp.tool()
-def inspect_active_window() -> Dict[str, str]:
+def inspect_active_window(workspace: Optional[str] = None) -> Dict[str, str]:
     """
     Returns the Title, Class, and Process Name of the currently active window.
     """
@@ -234,7 +234,7 @@ try {
     FileAppend("ERROR`n" e.Message "`n", "*")
 }
 '''
-    result = run_ahk_script(script_content, action_description="Inspect Active Window", timeout_seconds=2)
+    result = run_ahk_script(script_content, action_description="Inspect Active Window", timeout_seconds=2, workspace=workspace)
     
     if result.get("exit_code") == 0 and result.get("stdout"):
         lines = result["stdout"].strip().split('\n')
