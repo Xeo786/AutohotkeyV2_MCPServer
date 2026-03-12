@@ -1,9 +1,11 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
-#Include <cJSON> ; by geekdude https://github.com/geekdude/cJSON
+#Include <cJSON> ;cJSON by geekdude https://github.com/geekdude/cJSON
 
 ; MCP Action History Explorer
 ; Created for AutoHotkey v2 MCP Server
+; Created by Xeo786 (https://github.com/Xeo786)
+; Licensed under GNU GPL 3.0
 
 global HistoryDir := A_AppData "\AutoHotkey_MCP_Server\history"
 global HistoryIndex := HistoryDir "\history.json"

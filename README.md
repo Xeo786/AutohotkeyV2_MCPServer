@@ -14,8 +14,9 @@ AutoHotkey v2 introduced strict object-oriented syntax, removing graceful failur
 3. Cannot verify if the script even launches without crashing.
 4. Doesn't know what custom libraries the user already has installed.
 5. **Cannot debug running scripts** to diagnose issues.
+6. **No record of past work**: Without history, it's hard to "bring back" or review a script the AI ran 5 minutes ago.
 
-This server solves **all** of these problems by giving the AI eyes (inspect active window), knowledge (search library), hands (validate and run), and now a **full debugger** (DBGp protocol integration).
+This server solves **all** of these problems by giving the AI eyes (inspect active window), knowledge (search library), hands (validate and run), a **full debugger** (DBGp protocol integration), and now a **complete action history** with a dedicated GUI.
 
 ---
 
@@ -45,6 +46,25 @@ The server exposes tools in two categories:
 - **What it does:** Sets and persists the `AHK_PATH` and `GLOBAL_LIB_PATH` to the user's `AppData`.
 - **New Feature:** Supports `use_dialog=True` to pop up native Windows file/directory selection dialogs on the host machine for easy setup.
 - **How it helps:** Allows the server to remain portable and tool-neutral, letting the user (or AI) configure the exact binaries and libraries to use without editing the source code.
+
+#### 6. `get_action_history` & `restore_action`
+- **What it does:** Allows the AI to retrieve metadata about past scripts it has run and "restore" them (copy from history) back to its current workspace.
+- **How it helps:** Enables the AI to recall previous successful logic or bring back a script the user previously saw but didn't save.
+
+---
+
+## Action History & GUI
+
+The server now automatically logs every script execution to `%AppData%\AutoHotkey_MCP_Server\history\`.
+
+### MCP Action History GUI
+A standalone AHK v2 GUI is included (`MCP Action History.ahk`) within the server directory.
+- **Features:**
+    - **Live View:* Browse all past actions in a sortable ListView.
+    - **Preview:** Inspect the source code of any historical action.
+    - **Workspace Affinity:** Each action logs the workspace (CWD) where it was run.
+    - **One-Click Restore:** Quickly restore any script back to its original workspace with a timestamped filename.
+    - **History Management:** Delete selected entries or wipe the entire history to keep your workspace clean.
 
 ---
 
@@ -116,6 +136,15 @@ These tools allow the AI to **attach to and debug running AutoHotkey scripts** i
 7. **AI calls `dbg_detach()`** -> Disconnects cleanly.
 8. **AI explains:** "Your script was stuck in an infinite retry loop. I reset `retryCount` to 0."
 
+### Restoration: "Bring back the script you ran earlier"
+
+**User:** "Can you bring back that window inspection script you ran a few minutes ago? I want to keep it in my project."
+
+**AI Process:**
+1. **AI calls `get_action_history`** -> Finds the ID of the recent `inspect_active_window` tool call.
+2. **AI calls `restore_action(id, "s:/path/to/project/InspectHelper.ahk")`** -> Copies the script from history back to the user's project folder.
+3. **AI explains:** "I've restored that script to your project as `InspectHelper.ahk`."
+
 ---
 
 ## Installation
@@ -168,6 +197,7 @@ Once connected, you can leverage the full power of AutoHotkey through simple pro
 - **Web Automation**: *"Use Rufaydium to create a Chrome session and inspect the target webpage."*
 - **Error Resolution**: *"I have an AutoHotkey error popup; please diagnose and fix it."*
 - **Complex Workflows**: *"Scan my document, extract all keywords, and create a summary table in a new Excel workbook."*
+- **History Management**: *"Show me the last 5 things you did,"* or *"Restore the script from my last execution to this folder."*
 
 ---
 
