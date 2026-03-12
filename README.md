@@ -129,5 +129,36 @@ These tools allow the AI to **attach to and debug running AutoHotkey scripts** i
 
 ---
 
+## Connecting to Antigravity
+
+Antigravity can leverage this server to provide expert AutoHotkey assistance. To connect this server to your Antigravity instance, add it to your `antigravity.json` or your global MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "ahk-v2-server": {
+      "command": "python",
+      "args": ["path/to/server.py"],
+      "env": {
+        "AHK_PATH": "C:\\Program Files\\AutoHotkey\\v2\\AutoHotkey64.exe",
+        "GLOBAL_LIB_PATH": "C:\\Users\\YourUser\\Documents\\AutoHotkey\\Lib"
+      }
+    }
+  }
+}
+```
+
+### What can you ask Antigravity?
+Once connected, you can leverage the full power of AutoHotkey through simple prompts:
+- **System Awareness**: *"Inspect my active window and tell me its class."*
+- **Live Debugging**: *"Attach to my script (PID 1234) and find out why it's stuck."*
+- **Library Integration**: *"Write a new automation script using my existing local libraries."*
+- **Office Automation**: *"Highlight row X on my active Excel workbook using ComObject."*
+- **Web Automation**: *"Use Rufaydium to create a Chrome session and inspect the target webpage."*
+- **Error Resolution**: *"I have an AutoHotkey error popup; please diagnose and fix it."*
+- **Complex Workflows**: *"Scan my document, extract all keywords, and create a summary table in a new Excel workbook."*
+
+---
+
 ## License
 This project is licensed under the **GNU GPL 3.0**. See the [LICENSE](LICENSE) file for details.
