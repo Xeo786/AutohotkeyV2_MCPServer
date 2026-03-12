@@ -6,14 +6,18 @@ import os
 import subprocess
 import tempfile
 import glob
-from mcp.server.fastmcp import FastMCP
+import shutil
+import uuid
+import json
+from datetime import datetime
 from typing import Dict, Any, List, Optional
+from mcp.server.fastmcp import FastMCP
 from dbgp_client import (
     DbgpClient, DbgpError, DbgpConnectionError,
     get_active_client, set_active_client,
 )
 from config import (
-    resolve_ahk_path, resolve_lib_path, save_config, get_config, configure_paths
+    resolve_ahk_path, resolve_lib_path, save_config, get_config, configure_paths, HISTORY_DIR
 )
 
 # Create the FastMCP server
@@ -28,6 +32,57 @@ def _create_temp_ahk(script_content: str) -> str:
     with os.fdopen(fd, 'w', encoding='utf-8') as f:
         f.write(script_content)
     return path
+
+def _log_action(script_content: str, tool_name: str, action_description: str, result: Optional[Dict[str, Any]] = None):
+    """Logs the script and metadata to the history directory."""
+    try:
+        now = datetime.now()
+        date_folder = now.strftime("%Y-%m-%d")
+        target_dir = HISTORY_DIR / date_folder
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        action_id = str(uuid.uuid4())
+        filename = f"{now.strftime('%H-%M-%S')}_{action_id[:8]}.ahk"
+        script_path = target_dir / filename
+
+        with open(script_path, "w", encoding="utf-8") as f:
+            f.write(script_content)
+
+        # Update index
+        index_file = HISTORY_DIR / "history.json"
+        history = []
+        if index_file.exists():
+            try:
+                with open(index_file, "r", encoding="utf-8") as f:
+                    history = json.load(f)
+            except Exception:
+                history = []
+
+        first_line = script_content.split('\n')[0].strip() if script_content else ""
+        if len(first_line) > 100:
+            first_line = first_line[:97] + "..."
+
+        entry = {
+            "id": action_id,
+            "timestamp": now.isoformat(),
+            "tool": tool_name,
+            "description": action_description,
+            "script_file": str(script_path),
+            "summary": first_line,
+            "exit_code": result.get("exit_code") if result else None
+        }
+
+        history.insert(0, entry)
+        # Keep only last 500 entries
+        if len(history) > 500:
+            history = history[:500]
+
+        with open(index_file, "w", encoding="utf-8") as f:
+            json.dump(history, f, indent=4)
+
+    except Exception as e:
+        # Non-critical: don't fail the tool call if logging fails
+        print(f"Logging failed: {e}")
 
 @mcp.tool()
 def configure_paths(
@@ -76,7 +131,7 @@ def configure_paths(
     }
 
 @mcp.tool()
-def validate_ahk_syntax(script_content: str) -> str:
+def validate_ahk_syntax(script_content: str, action_description: str = "Syntax Validation") -> str:
     """
     Validates AutoHotkey v2 syntax without executing the script.
     """
@@ -96,17 +151,22 @@ def validate_ahk_syntax(script_content: str) -> str:
             errors='replace',
             startupinfo=startupinfo
         )
+        
+        status_msg = ""
         if result.returncode == 0:
-            return "Syntax validation passed successfully. Exit code 0."
+            status_msg = "Syntax validation passed successfully. Exit code 0."
         else:
-            return f"Syntax Error (Exit Code {result.returncode}):\n{result.stderr.strip()}"
+            status_msg = f"Syntax Error (Exit Code {result.returncode}):\n{result.stderr.strip()}"
+        
+        _log_action(script_content, "validate_ahk_syntax", action_description, {"exit_code": result.returncode})
+        return status_msg
     except Exception as e:
         return f"Execution Error: {str(e)}"
     finally:
         os.remove(temp_path)
 
 @mcp.tool()
-def run_ahk_script(script_content: str, timeout_seconds: int = 3) -> Dict[str, Any]:
+def run_ahk_script(script_content: str, action_description: str = "Manual Script Execution", timeout_seconds: int = 3) -> Dict[str, Any]:
     """
     Runs an AutoHotkey v2 script with a strictly enforced timeout.
     Returns stdout, stderr, and exit_code.
@@ -128,20 +188,25 @@ def run_ahk_script(script_content: str, timeout_seconds: int = 3) -> Dict[str, A
             errors='replace',
             startupinfo=startupinfo
         )
-        return {
+        
+        output = {
             "stdout": result.stdout,
             "stderr": result.stderr,
             "exit_code": result.returncode
         }
+        _log_action(script_content, "run_ahk_script", action_description, output)
+        return output
     except subprocess.TimeoutExpired as e:
         stdout = e.stdout.decode('utf-8', errors='replace') if isinstance(e.stdout, bytes) else (e.stdout or "")
         stderr = e.stderr.decode('utf-8', errors='replace') if isinstance(e.stderr, bytes) else (e.stderr or "")
-        return {
+        output = {
             "stdout": stdout,
             "stderr": stderr,
             "exit_code": -1,
             "error": f"Script execution timed out after {timeout_seconds} seconds."
         }
+        _log_action(script_content, "run_ahk_script", action_description, output)
+        return output
     except Exception as e:
         return {
             "stdout": "",
@@ -168,7 +233,7 @@ try {
     FileAppend("ERROR`n" e.Message "`n", "*")
 }
 '''
-    result = run_ahk_script(script_content, timeout_seconds=2)
+    result = run_ahk_script(script_content, action_description="Inspect Active Window", timeout_seconds=2)
     
     if result.get("exit_code") == 0 and result.get("stdout"):
         lines = result["stdout"].strip().split('\n')
@@ -225,6 +290,48 @@ def update_server_config(ahk_path: str, lib_path: str) -> Dict[str, Any]:
     Updates the server configuration with new AutoHotkey and Library paths.
     """
     return configure_paths(ahk_path, lib_path)
+
+@mcp.tool()
+def get_action_history(limit: int = 20) -> List[Dict[str, Any]]:
+    """
+    Returns the last N actions performed by the MCP server.
+    """
+    index_file = HISTORY_DIR / "history.json"
+    if not index_file.exists():
+        return []
+    
+    try:
+        with open(index_file, "r", encoding="utf-8") as f:
+            history = json.load(f)
+            return history[:limit]
+    except Exception as e:
+        return [{"error": f"Failed to read history: {e}"}]
+
+@mcp.tool()
+def restore_action(action_id: str, target_path: str) -> Dict[str, str]:
+    """
+    Copies a previously performed action's script to a target file path.
+    """
+    index_file = HISTORY_DIR / "history.json"
+    if not index_file.exists():
+        return {"status": "error", "message": "No history found."}
+
+    try:
+        with open(index_file, "r", encoding="utf-8") as f:
+            history = json.load(f)
+        
+        entry = next((e for e in history if e["id"] == action_id or e["id"].startswith(action_id)), None)
+        if not entry:
+            return {"status": "error", "message": f"Action ID {action_id} not found."}
+        
+        source_path = entry["script_file"]
+        if not os.path.exists(source_path):
+            return {"status": "error", "message": "Source script file no longer exists."}
+        
+        shutil.copy2(source_path, target_path)
+        return {"status": "success", "message": f"Restored {action_id} to {target_path}"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 # ==========================================================================
 # DBGp Debug Tools

@@ -8,6 +8,7 @@ from pathlib import Path
 
 CONFIG_DIR = Path(os.environ.get("APPDATA", "~")) / "AutoHotkey_MCP_Server"
 CONFIG_FILE = CONFIG_DIR / "config.json"
+HISTORY_DIR = CONFIG_DIR / "history"
 
 DEFAULT_AHK_PATH = r"C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe"
 DEFAULT_LIB_PATH = str(Path.home() / "Documents" / "AutoHotkey" / "Lib")
