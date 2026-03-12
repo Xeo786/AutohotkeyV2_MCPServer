@@ -1,8 +1,8 @@
 import sys
 import os
 
-# Add the server directory to path
-sys.path.insert(0, r"S:\lib\AutohotkeyV2_MCPServer")
+# Add parent directory to path so we can import server
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from server import configure_paths
 

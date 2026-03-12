@@ -1,5 +1,7 @@
 # AutoHotkey v2 MCP Server
 
+**Created by [Xeo786](https://github.com/Xeo786)**
+
 ## What is it?
 This is a custom **Model Context Protocol (MCP)** server built in Python, designed specifically to bridge the gap between AI coding assistants and the AutoHotkey v2 ecosystem on Windows. 
 
@@ -116,27 +118,16 @@ These tools allow the AI to **attach to and debug running AutoHotkey scripts** i
 
 ---
 
-4. **Configure Paths (Optional but Recommended):**
-   By default, the server looks for AHK in standard locations. You can set your custom paths by calling the `configure_paths` tool once the server is running, or by setting environment variables:
-   - `AHK_PATH`: Path to `AutoHotkey64.exe`
-   - `GLOBAL_LIB_PATH`: Path to your script library folder.
+## Installation
 
-5. **Restart:** Restart your IDE. All tools will be available in the context of your chats.
+1. Install Python 3.10+.
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Configure your AutoHotkey and Library paths using the `configure_paths` tool.
 
 ---
 
-## Architecture
-
-```
-server.py          ← MCP tool definitions (FastMCP)
-├── Core tools     ← validate, run, inspect, search
-├── Debug tools    ← 15 dbg_* tools
-└── dbgp_client.py ← Pure Python DBGp protocol client
-    ├── TCP listener (default port 9005)
-    ├── DBGp wire protocol (length\0xml\0)
-    └── XML response parsing
-```
-
-## AI Core Operating Rules
-
-See [mcp_rules.md](mcp_rules.md) for the complete set of rules the AI must follow when using these tools.
+## License
+This project is licensed under the **GNU GPL 3.0**. See the [LICENSE](LICENSE) file for details.

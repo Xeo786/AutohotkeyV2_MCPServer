@@ -1,3 +1,7 @@
+# AutoHotkey v2 MCP Server
+# Created by Xeo786 (https://github.com/Xeo786)
+# Licensed under GNU GPL 3.0
+
 """
 DBGp Client for AutoHotkey — Pure Python implementation.
 

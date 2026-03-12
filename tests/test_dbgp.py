@@ -19,7 +19,7 @@ import sys
 import tempfile
 
 # Add parent directory to path so we can import server
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from server import (
     dbg_attach, dbg_detach, dbg_status, dbg_break,
