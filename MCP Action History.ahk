@@ -12,13 +12,15 @@ MyGui := Gui("+Resize", "MCP Action History")
 MyGui.SetFont("s10", "Segoe UI")
 
 MyGui.Add("Text", "w600", "Action History from " HistoryIndex)
-LV := MyGui.Add("ListView", "xm w800 h400", ["Time", "Tool", "Description", "Summary", "ID"])
+LV := MyGui.Add("ListView", "xm w800 h400", ["Time", "Tool", "Description", "Summary", "ID", "Workspace", "ScriptPath"])
 LV.OnEvent("DoubleClick", LV_DoubleClick)
 
 MyGui.Add("Button", "Default w100", "Refresh").OnEvent("Click", RefreshHistory)
 MyGui.Add("Button", "x+10 w100", "Preview").OnEvent("Click", PreviewSelected)
 MyGui.Add("Button", "x+10 w100", "Copy Code").OnEvent("Click", CopySelected)
 MyGui.Add("Button", "x+10 w150", "Restore to Workspace").OnEvent("Click", RestoreSelected)
+MyGui.Add("Button", "x+10 w120", "Delete Selected").OnEvent("Click", DeleteSelected)
+MyGui.Add("Button", "x+10 w120", "Delete All History").OnEvent("Click", DeleteAll)
 
 MyGui.OnEvent("Close", (*) => ExitApp())
 MyGui.OnEvent("Size", Gui_Size)
@@ -42,13 +44,16 @@ RefreshHistory(*)
         
         for entry in history
         {
-            LV.Add(, entry["timestamp"], entry["tool"], entry["description"], entry["summary"], entry["id"])
+            LV.Add(, entry["timestamp"], entry["tool"], entry["description"], entry["summary"], entry["id"], entry.Has("workspace") ? entry["workspace"] : "", entry["script_file"])
+        }
+        
         LV.ModifyCol(1, "AutoHdr")
         LV.ModifyCol(2, "AutoHdr")
         LV.ModifyCol(3, "AutoHdr")
-        LV.ModifyCol(4, 400)
+        LV.ModifyCol(4, "AutoHdr")
         LV.ModifyCol(5, 0) ; Hide ID
-        }
+        LV.ModifyCol(6, "AutoHdr") ; Show Workspace
+        LV.ModifyCol(7, 0) ; Hide ScriptPath
     }
     catch as e
     {
@@ -62,7 +67,7 @@ PreviewSelected(*)
     if !row
         return
     
-    scriptFile := GetScriptFileFromSelected(row)
+    scriptFile := LV.GetText(row, 7)
     if !FileExist(scriptFile)
     {
         MsgBox("Script file not found: " scriptFile)
@@ -83,7 +88,7 @@ CopySelected(*)
     if !row
         return
     
-    scriptFile := GetScriptFileFromSelected(row)
+    scriptFile := LV.GetText(row, 7)
     if !FileExist(scriptFile)
     {
         MsgBox("Script file not found: " scriptFile)
@@ -101,42 +106,134 @@ RestoreSelected(*)
     if !row
         return
     
-    scriptFile := GetScriptFileFromSelected(row)
+    scriptFile := LV.GetText(row, 7)
+    workspacePath := LV.GetText(row, 6)
+    
     if !FileExist(scriptFile)
     {
-        MsgBox("Script file not found: " scriptFile)
+        MsgBox("Script file not found in history: " scriptFile)
         return
     }
 
-    targetPath := FileSelect("S", "restored_action.ahk", "Restore Action As", "AutoHotkey Files (*.ahk)")
+    defaultName := "restored_" FormatTime(, "HHmmss") ".ahk"
+
+    if (workspacePath == "")
+    {
+        targetPath := FileSelect("S", defaultName, "Restore Action As", "AutoHotkey Files (*.ahk)")
+    }
+    else if !DirExist(workspacePath)
+    {
+        MsgBox("Original workspace path no longer exists:`n" workspacePath "`nPlease select a new location.")
+        targetPath := FileSelect("S", defaultName, "Restore Action As", "AutoHotkey Files (*.ahk)")
+    }
+    else
+    {
+        targetPath := workspacePath "\" defaultName
+        if MsgBox("Restore this action to original workspace?`n`nPath: " targetPath, "Confirm Restore", "YesNo") == "No"
+            targetPath := FileSelect("S", defaultName, "Restore Action As", "AutoHotkey Files (*.ahk)")
+    }
+
     if !targetPath
         return
     
     if !RegExMatch(targetPath, "\.ahk$")
         targetPath .= ".ahk"
         
-    FileCopy(scriptFile, targetPath, 1)
-    MsgBox("Action restored to: " targetPath)
+    try
+    {
+        FileCopy(scriptFile, targetPath, 1)
+        MsgBox("Action restored to: " targetPath)
+    }
+    catch as e
+    {
+        MsgBox("Restoration failed:`n" e.Message)
+    }
 }
 
 GetScriptFileFromSelected(row)
 {
-    actionId := LV.GetText(row, 5)
+    return LV.GetText(row, 7)
+}
+
+DeleteSelected(*)
+{
+    row := 0
+    selectedRows := []
+    while (row := LV.GetNext(row))
+        selectedRows.Push(row)
     
-    ; We need to find the entry in JSON to get the full path, 
-    ; or we could have stored it in a hidden column.
-    ; For efficiency, let's just re-read the JSON or store it.
-    ; Storing it in ListView as a hidden column 6 is better.
-    ; But for now, I'll just find it in the index.
-    
-    jsonText := FileRead(HistoryIndex, "UTF-8")
-    history := JSON.Load(jsonText)
-    for entry in history
+    if (selectedRows.Length == 0)
     {
-        if (entry["id"] == actionId)
-            return entry["script_file"]
+        MsgBox("Please select one or more actions to delete.")
+        return
     }
-    return ""
+    
+    if MsgBox("Are you sure you want to delete the " selectedRows.Length " selected actions?`nThis will remove the log files permanently.", "Confirm Delete", "YesNo Icon!") == "No"
+        return
+
+    try 
+    {
+        jsonText := FileRead(HistoryIndex, "UTF-8")
+        history := JSON.Load(jsonText)
+        
+        idsToDelete := Map()
+        for rowIdx in selectedRows
+            idsToDelete[LV.GetText(rowIdx, 5)] := rowIdx
+
+        newHistory := []
+        for entry in history
+        {
+            if idsToDelete.Has(entry["id"])
+            {
+                if FileExist(entry["script_file"])
+                    FileDelete(entry["script_file"])
+            }
+            else
+            {
+                newHistory.Push(entry)
+            }
+        }
+
+        FileOpen(HistoryIndex, "w", "UTF-8").Write(JSON.Dump(newHistory, 4))
+        RefreshHistory()
+        ToolTip("Selected actions deleted.")
+        SetTimer(() => ToolTip(), -2000)
+    }
+    catch as e
+    {
+        MsgBox("Failed to delete selected actions: " e.Message)
+    }
+}
+
+DeleteAll(*)
+{
+    if MsgBox("CRITICAL: Are you sure you want to delete ALL history?`nThis will remove ALL log files and dated folders permanently.", "Confirm Delete ALL", "YesNo Icon!") == "No"
+        return
+    
+    try 
+    {
+        ; Reset the index first
+        FileOpen(HistoryIndex, "w", "UTF-8").Write("[]")
+        
+        ; Delete all subdirectories in HistoryDir (dated folders)
+        Loop Files, HistoryDir "\*", "D"
+        {
+            DirDelete(A_LoopFileFullPath, 1)
+        }
+        
+        ; Also delete any stray AHK files in HistoryDir
+        Loop Files, HistoryDir "\*.ahk"
+        {
+            FileDelete(A_LoopFileFullPath)
+        }
+
+        RefreshHistory()
+        MsgBox("All history has been cleared.")
+    }
+    catch as e
+    {
+        MsgBox("Failed to clear history: " e.Message)
+    }
 }
 
 LV_DoubleClick(LV, RowNumber)

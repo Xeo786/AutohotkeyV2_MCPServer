@@ -68,6 +68,7 @@ def _log_action(script_content: str, tool_name: str, action_description: str, re
             "tool": tool_name,
             "description": action_description,
             "script_file": str(script_path),
+            "workspace": os.getcwd(),
             "summary": first_line,
             "exit_code": result.get("exit_code") if result else None
         }
@@ -166,7 +167,7 @@ def validate_ahk_syntax(script_content: str, action_description: str = "Syntax V
         os.remove(temp_path)
 
 @mcp.tool()
-def run_ahk_script(script_content: str, action_description: str = "Manual Script Execution", timeout_seconds: int = 3) -> Dict[str, Any]:
+def run_ahk_script(script_content: str, timeout_seconds: int = 3, action_description: str = "Manual Script Execution") -> Dict[str, Any]:
     """
     Runs an AutoHotkey v2 script with a strictly enforced timeout.
     Returns stdout, stderr, and exit_code.
