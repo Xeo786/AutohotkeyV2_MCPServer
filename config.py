@@ -70,3 +70,10 @@ def resolve_lib_path():
     
     # 3. Default Location
     return DEFAULT_LIB_PATH
+
+def configure_paths(ahk_path, lib_path):
+    config = get_config()
+    config["ahk_path"] = ahk_path
+    config["lib_path"] = lib_path
+    save_config(config)
+    return {"status": "success", "ahk_path": ahk_path, "lib_path": lib_path}

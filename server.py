@@ -9,7 +9,7 @@ from dbgp_client import (
     get_active_client, set_active_client,
 )
 from config import (
-    resolve_ahk_path, resolve_lib_path, save_config, get_config
+    resolve_ahk_path, resolve_lib_path, save_config, get_config, configure_paths
 )
 
 # Create the FastMCP server
@@ -214,6 +214,13 @@ def search_global_library(query: str) -> str:
         return f"No matches found for '{query}' in {GLOBAL_LIB_PATH}."
         
     return "\n\n".join(matches)
+    
+@mcp.tool()
+def update_server_config(ahk_path: str, lib_path: str) -> Dict[str, Any]:
+    """
+    Updates the server configuration with new AutoHotkey and Library paths.
+    """
+    return configure_paths(ahk_path, lib_path)
 
 # ==========================================================================
 # DBGp Debug Tools
