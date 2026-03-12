@@ -147,6 +147,17 @@ Antigravity can leverage this server to provide expert AutoHotkey assistance. To
   }
 }
 ```
+### Zero Configuration (Antigravity Only)
+If you are an **Antigravity** user, you can skip manual JSON editing:
+1. **Clone** this repository locally.
+2. Open an Antigravity chat and tell it the **absolute path** to the repo.
+3. Ask it to: *"Connect to the MCP server in this directory."*
+
+**The Experience:**
+Once connected, try asking:
+> *"Can you use the AutoHotkey v2 MCP? How does it feel to have these tools at your disposal?"*
+
+You will see that with these "eyes and hands," Antigravity's ability to automate your Windows environment becomes exponentially more effective—transforming from a guessing assistant into a precise systems architect.
 
 ### What can you ask Antigravity?
 Once connected, you can leverage the full power of AutoHotkey through simple prompts:
