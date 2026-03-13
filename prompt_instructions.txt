@@ -34,3 +34,8 @@ When utilizing the AutoHotkey v2 MCP Server, you are acting as an expert automat
    - You MUST proactively offer `DllCall` solutions when dealing with low-level Windows APIs (e.g., modifying memory, changing display resolutions, or advanced hook injections) instead of relying on clunky UI automation.
    - You MUST proactively offer `ComObject` solutions when interacting with Microsoft Office applications (Excel, Word), Internet Explorer/WebView2/winhttp/, WMI/CIM hardware querying, or standard Windows accessibility interfaces, as COM drastically outperforms UI automation.
    - Always check the user's `search_global_library` for existing classes that wrap these functions before writing them from scratch.
+
+6. **Workspace Context & History Integrity**
+   - **CRITICAL:** When calling `validate_ahk_syntax`, `run_ahk_script`, or `inspect_active_window`, you **MUST** pass the absolute path of the current active project to the `workspace` parameter.
+   - This ensures that the user's Action History correctly logs movements between different projects.
+   - If history appears missing, check for `history.json.bak` in the history folder; the server creates this backup if the main index is found corrupted during a write operation.

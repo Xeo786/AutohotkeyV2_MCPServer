@@ -44,3 +44,8 @@ AutoHotkey is a highly capable systems tool, not just a macro engine. The AI mus
 1. **`DllCall`:** If the user is trying to accomplish system-level changes (e.g., memory address reading, display topology, low-level mouse hooks, GDI+ rendering), proactively suggest bypassing the UI and using direct Win32 API `DllCall` implementations.
 2. **`ComObject`:** If the user is attempting to read Microsoft Office files, interact with WMI (hardware info), WebView2, or standard accessibility nodes, proactively suggest using Component Object Model (`ComObject`) instead of trying to automate clicks on screen.
 3. **Pre-built Library Leverage:** When pivoting to these advanced topics, search the user's local `mylib` via `search_global_library` first. If a `class cJSON` or `class UIA` or `class WebView2` already exists, use their established interface rather than rewriting lower-level code.
+
+### Rule 5: Workspace Logging & History Integrity
+Accurate history logging is vital for the user's workflow. The AI MUST ensure all actions are contextualized:
+1. **Mandatory Workspace Parameter:** When calling `validate_ahk_syntax`, `run_ahk_script`, or `inspect_active_window`, the AI **MUST** pass the absolute path of the current active project to the `workspace` parameter. (Do not rely on the server's default CWD).
+2. **History Verification:** If the user reports missing history, check for `history.json.bak` in the history directory. The server automatically creates this backup if the main index is found to be corrupted during a write operation.

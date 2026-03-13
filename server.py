@@ -55,7 +55,11 @@ def _log_action(script_content: str, tool_name: str, action_description: str, re
             try:
                 with open(index_file, "r", encoding="utf-8") as f:
                     history = json.load(f)
-            except Exception:
+            except Exception as e:
+                # If file exists but is corrupted/empty, don't just overwrite it with []
+                # Back it up and start fresh to avoid total loss of data without notice
+                print(f"History index corrupted, creating backup: {e}")
+                shutil.copy2(index_file, str(index_file) + ".bak")
                 history = []
 
         first_line = script_content.split('\n')[0].strip() if script_content else ""
@@ -135,6 +139,10 @@ def configure_paths(
 def validate_ahk_syntax(script_content: str, action_description: str = "Syntax Validation", workspace: Optional[str] = None) -> str:
     """
     Validates AutoHotkey v2 syntax without executing the script.
+    
+    AGENT PROTOCOL: You MUST pass the absolute path of the current active project 
+    to the 'workspace' parameter. This ensures the action is logged to the correct 
+    project history for the user.
     """
     temp_path = _create_temp_ahk(script_content)
     try:
@@ -171,6 +179,10 @@ def run_ahk_script(script_content: str, timeout_seconds: int = 3, action_descrip
     """
     Runs an AutoHotkey v2 script with a strictly enforced timeout.
     Returns stdout, stderr, and exit_code.
+
+    AGENT PROTOCOL: You MUST pass the absolute path of the current active project 
+    to the 'workspace' parameter. This ensures the action is logged to the correct 
+    project history for the user.
     """
     temp_path = _create_temp_ahk(script_content)
     try:
@@ -222,6 +234,10 @@ def run_ahk_script(script_content: str, timeout_seconds: int = 3, action_descrip
 def inspect_active_window(workspace: Optional[str] = None) -> Dict[str, str]:
     """
     Returns the Title, Class, and Process Name of the currently active window.
+
+    AGENT PROTOCOL: You MUST pass the absolute path of the current active project 
+    to the 'workspace' parameter. This ensures the action is logged to the correct 
+    project history for the user.
     """
     script_content = '''#Requires AutoHotkey v2.0
 #NoTrayIcon
