@@ -1,7 +1,7 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
 #Include <cJSON> ;cJSON by geekdude https://github.com/geekdude/cJSON
-
+Persistent
 ; MCP Action History Explorer
 ; Created for AutoHotkey v2 MCP Server
 ; Created by Xeo786 (https://github.com/Xeo786)
@@ -10,10 +10,19 @@
 global HistoryDir := A_AppData "\AutoHotkey_MCP_Server\history"
 global HistoryIndex := HistoryDir "\history.json"
 TraySetIcon("networkexplorer.dll", 4) 
-MyGui := Gui("+Resize", "MCP Action History")
+MyGui := Gui("+Resize", "Autohotkey v2 MCP Action History")
 MyGui.SetFont("s10", "Segoe UI")
 
 global StartupShortcut := A_Startup "\MCP Action History.lnk"
+
+A_TrayMenu.Delete()
+A_TrayMenu.Add("Show", toggleShowHide)
+A_TrayMenu.Default := "Show"
+A_TrayMenu.ClickCount := 1
+A_TrayMenu.Add()
+A_TrayMenu.Add("Reload", (*) => Reload())
+A_TrayMenu.Add("Exit", (*) => ExitApp())
+
 MyGui.Add("Text", "w600", "Action History from " HistoryIndex)
 StartupCheckbox := MyGui.Add("Checkbox", "x780 yp w120 " (FileExist(StartupShortcut) ? "Checked" : ""), "Run on Startup")
 StartupCheckbox.OnEvent("Click", ToggleStartup)
@@ -26,12 +35,21 @@ MyGui.Add("Button", "x+10 w100", "Copy Code").OnEvent("Click", CopySelected)
 MyGui.Add("Button", "x+10 w150", "Restore to Workspace").OnEvent("Click", RestoreSelected)
 MyGui.Add("Button", "x+10 w120", "Delete Selected").OnEvent("Click", DeleteSelected)
 MyGui.Add("Button", "x+10 w120", "Delete All History").OnEvent("Click", DeleteAll)
+MyGui.Add("Button", "x780 yp w120", "Hide").OnEvent("Click", (*) => MyGui.hide())
 
-MyGui.OnEvent("Close", (*) => ExitApp())
+MyGui.OnEvent("Close", (*) => MyGui.hide())
 MyGui.OnEvent("Size", Gui_Size)
 
 RefreshHistory()
 MyGui.Show()
+
+toggleShowHide(*)
+{
+    if DllCall("IsWindowVisible", "Ptr", MyGui.Hwnd)
+        MyGui.Hide()
+    else
+        MyGui.Show()
+}
 
 RefreshHistory(*)
 {
