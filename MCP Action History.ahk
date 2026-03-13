@@ -9,11 +9,14 @@
 
 global HistoryDir := A_AppData "\AutoHotkey_MCP_Server\history"
 global HistoryIndex := HistoryDir "\history.json"
-
+TraySetIcon("networkexplorer.dll", 4) 
 MyGui := Gui("+Resize", "MCP Action History")
 MyGui.SetFont("s10", "Segoe UI")
 
+global StartupShortcut := A_Startup "\MCP Action History.lnk"
 MyGui.Add("Text", "w600", "Action History from " HistoryIndex)
+StartupCheckbox := MyGui.Add("Checkbox", "x780 yp w120 " (FileExist(StartupShortcut) ? "Checked" : ""), "Run on Startup")
+StartupCheckbox.OnEvent("Click", ToggleStartup)
 LV := MyGui.Add("ListView", "xm w800 h400", ["Time", "Tool", "Description", "Summary", "ID", "Workspace", "ScriptPath"])
 LV.OnEvent("DoubleClick", LV_DoubleClick)
 
@@ -242,6 +245,39 @@ LV_DoubleClick(LV, RowNumber)
 {
     if RowNumber
         PreviewSelected()
+}
+
+
+ToggleStartup(Ctrl, *)
+{
+    if Ctrl.Value
+    {
+        try
+        {
+            FileCreateShortcut(A_ScriptFullPath, StartupShortcut, A_ScriptDir)
+            ToolTip("Added to Startup")
+        }
+        catch as e
+        {
+            MsgBox("Failed to create shortcut:`n" e.Message)
+            Ctrl.Value := 0
+        }
+    }
+    else
+    {
+        try
+        {
+            if FileExist(StartupShortcut)
+                FileDelete(StartupShortcut)
+            ToolTip("Removed from Startup")
+        }
+        catch as e
+        {
+            MsgBox("Failed to remove shortcut:`n" e.Message)
+            Ctrl.Value := 1
+        }
+    }
+    SetTimer(() => ToolTip(), -2000)
 }
 
 Gui_Size(thisGui, MinMax, Width, Height)
