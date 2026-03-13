@@ -27,15 +27,20 @@ MyGui.Add("Text", "w600", "Action History from " HistoryIndex)
 StartupCheckbox := MyGui.Add("Checkbox", "x780 yp w120 " (FileExist(StartupShortcut) ? "Checked" : ""), "Run on Startup")
 StartupCheckbox.OnEvent("Click", ToggleStartup)
 LV := MyGui.Add("ListView", "xm w800 h400", ["Time", "Tool", "Description", "Summary", "ID", "Workspace", "ScriptPath"])
-LV.OnEvent("DoubleClick", LV_DoubleClick)
+LV.OnEvent("DoubleClick", (*) => PreviewSelected())
+LV.OnEvent("ContextMenu", LV_ContextMenu)
+
+; Context Menu for ListView
+LVMenu := Menu()
+LVMenu.Add("Preview", PreviewSelected)
+LVMenu.Add("Copy Code", CopySelected)
+LVMenu.Add("Restore to Workspace", RestoreSelected)
+LVMenu.Add("Delete Selected", DeleteSelected)
 
 MyGui.Add("Button", "Default w100", "Refresh").OnEvent("Click", RefreshHistory)
-MyGui.Add("Button", "x+10 w100", "Preview").OnEvent("Click", PreviewSelected)
-MyGui.Add("Button", "x+10 w100", "Copy Code").OnEvent("Click", CopySelected)
-MyGui.Add("Button", "x+10 w150", "Restore to Workspace").OnEvent("Click", RestoreSelected)
-MyGui.Add("Button", "x+10 w120", "Delete Selected").OnEvent("Click", DeleteSelected)
-MyGui.Add("Button", "x+10 w120", "Delete All History").OnEvent("Click", DeleteAll)
-MyGui.Add("Button", "x780 yp w120", "Hide").OnEvent("Click", (*) => MyGui.hide())
+MyGui.Add("Button", "x+10 w150", "Delete All History").OnEvent("Click", DeleteAll)
+btnHide := MyGui.Add("Button", "x780 yp w120", "Hide")
+btnHide.OnEvent("Click", (*) => MyGui.Hide())
 
 MyGui.OnEvent("Close", (*) => MyGui.hide())
 MyGui.OnEvent("Size", Gui_Size)
@@ -67,7 +72,18 @@ RefreshHistory(*)
         
         for entry in history
         {
-            LV.Add(, entry["timestamp"], entry["tool"], entry["description"], entry["summary"], entry["id"], entry.Has("workspace") ? entry["workspace"] : "", entry["script_file"])
+            ; Use a helper to safely get values from Map or Object
+            getVal := (obj, key, default:="") => (obj is Map ? (obj.Has(key) ? obj[key] : default) : (HasProp(obj, key) ? obj.%key% : default))
+            
+            LV.Add(, 
+                getVal(entry, "timestamp"), 
+                getVal(entry, "tool"), 
+                getVal(entry, "description"), 
+                getVal(entry, "summary"), 
+                getVal(entry, "id"), 
+                getVal(entry, "workspace"), 
+                getVal(entry, "script_file")
+            )
         }
         
         LV.ModifyCol(1, "AutoHdr")
@@ -259,10 +275,10 @@ DeleteAll(*)
     }
 }
 
-LV_DoubleClick(LV, RowNumber)
+LV_ContextMenu(GuiCtrl, Item, IsRightClick, X, Y)
 {
-    if RowNumber
-        PreviewSelected()
+    if Item
+        LVMenu.Show(X, Y)
 }
 
 
@@ -303,4 +319,8 @@ Gui_Size(thisGui, MinMax, Width, Height)
     if MinMax = -1
         return
     LV.Move(,, Width - 20, Height - 80)
+    
+    ; Reposition checkbox and hide button to stay on the right
+    StartupCheckbox.Move(Width - 140)
+    btnHide.Move(Width - 140, Height - 35)
 }
